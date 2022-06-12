@@ -1,18 +1,22 @@
 from urllib.request import ssl, socket
 import datetime, csv, time
+import tldextract
 
 
 def get_data(hostname):
     context = ssl.create_default_context()
-    with socket.create_connection((hostname, "443")) as sock:
-        with context.wrap_socket(sock, server_hostname=hostname) as ssock:
-            certificate = ssock.getpeercert()
+    try:
+        with socket.create_connection((hostname, "443")) as sock:
+            with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                certificate = ssock.getpeercert()
 
-            expiry_date = get_expiry_date(certificate)
-            issuer = get_issuer_name(certificate)
-            alt_name_count = len(certificate["subjectAltName"])
+                expiry_date = get_expiry_date(certificate)
+                issuer = get_issuer_name(certificate)
+                alt_name_count = len(certificate["subjectAltName"])
 
-            return [hostname, expiry_date, issuer, alt_name_count]
+                return [hostname, expiry_date, issuer, alt_name_count]
+    except:
+        return [hostname]
 
 
 def get_expiry_date(cert):
@@ -37,5 +41,21 @@ with open("output.csv", "w", encoding="UTF8") as outputfile:
     with open("data.csv", newline="") as datafile:
         r = csv.reader(datafile)
         for line in r:
-            hostname = line[0]
+            u = line[0]
+            sanitized = (
+                u.lower()
+                .replace("//:", "://")
+                .replace("///", "//")
+                .replace("http//", "http://")
+                .replace("https//", "https://")
+                .replace('"', "")
+                .replace("'", "")
+                .replace(" ", "")
+            )
+            e = tldextract.extract(sanitized)
+            if e.subdomain not in ["", "www"]:
+                hostname = e.fqdn
+            else:
+                hostname = e.registered_domain
+
             writer.writerow(get_data(hostname))
